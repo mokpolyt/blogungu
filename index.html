@@ -254,6 +254,83 @@
     letter-spacing: -.8px;
   }
 
+  .article-content h3 {
+    margin: 40px 0 14px;
+    font-size: 25px;
+    line-height: 1.25;
+  }
+
+  .article-content div { margin: 0 0 27px; }
+  .article-content p:empty { display: none; }
+  .article-content ul, .article-content ol { margin: 0 0 27px; padding-left: 28px; }
+  .article-content blockquote {
+    margin: 0 0 27px; padding: 4px 0 4px 20px;
+    border-left: 3px solid var(--green); color: var(--muted);
+  }
+  .article-content img {
+    display: block; max-width: 100%; height: auto;
+    border-radius: 8px; margin: 8px 0 27px;
+  }
+  .article-content mark { background: transparent; color: inherit; }
+
+  /* ---------- Admin rich editor ---------- */
+  .rte-toolbar {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px; border: 1px solid var(--line); border-bottom: 0;
+    border-radius: 6px 6px 0 0; background: var(--bg);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .rte-toolbar button, .rte-toolbar select {
+    font: 14px Arial, Helvetica, sans-serif;
+    min-width: 34px; height: 34px; padding: 0 9px;
+    border: 1px solid var(--line); border-radius: 5px;
+    background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .rte-toolbar button:hover, .rte-toolbar select:hover { border-color: var(--green); }
+  .rte-toolbar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+  .rte-toolbar label {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: 13px Arial, Helvetica, sans-serif; color: var(--muted);
+  }
+  .rte-toolbar input[type=color] {
+    width: 34px; height: 34px; max-width: 34px; padding: 2px;
+    border: 1px solid var(--line); border-radius: 5px; background: var(--surface); cursor: pointer;
+  }
+  .rte-editor {
+    min-height: 360px; max-height: 70vh; overflow-y: auto;
+    padding: 18px; border: 1px solid var(--line); border-radius: 0 0 6px 6px;
+    background: #fff; color: var(--text); outline: none;
+    font-size: 19px; line-height: 1.7;
+  }
+  .rte-editor:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(138,79,209,.15); }
+  .rte-editor:empty:before { content: attr(data-placeholder); color: var(--muted); }
+  .rte-editor p { margin: 0 0 22px; }
+  .rte-editor div { margin: 0 0 22px; }
+  .rte-editor h2 { margin: 30px 0 14px; font-size: 30px; line-height: 1.2; }
+  .rte-editor h3 { margin: 24px 0 12px; font-size: 23px; line-height: 1.25; }
+  .rte-editor img { max-width: 100%; height: auto; border-radius: 8px; }
+  .rte-editor img.rte-selected { outline: 3px solid var(--green); }
+  .rte-hint { font: 12px Arial, Helvetica, sans-serif; color: var(--muted); margin: 6px 0 0; }
+
+  .media-modal {
+    position: fixed; inset: 0; z-index: 100; background: rgba(46,33,64,.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .media-box {
+    width: min(100%, 820px); max-height: 88vh; overflow: auto;
+    background: var(--surface); border-radius: 12px; padding: 20px;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  .media-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 14px;
+  }
+  .media-grid button {
+    padding: 0; border: 2px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: #fff; cursor: pointer; aspect-ratio: 1;
+  }
+  .media-grid button:hover { border-color: var(--green); }
+  .media-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
   footer {
     border-top: 1px solid var(--line);
     padding: 30px 24px;
@@ -2264,10 +2341,47 @@ function openPost(index) {
   window.scrollTo({top:0, behavior:"instant"});
 }
 
+/* Plain text (no HTML tags) -> paragraphs. A blank line starts a new <p>,
+   a single line break becomes <br>. Prevents "text wall" for pasted/plain content. */
+function plainTextToParagraphs(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => "<p>" + cmsEscape(block).replace(/\n/g, "<br>") + "</p>")
+    .join("");
+}
+
+function normalizeContent(input) {
+  const str = String(input || "");
+  const hasBlockHTML = /<(p|div|h[1-6]|ul|ol|blockquote|img|br|hr)\b/i.test(str);
+  return hasBlockHTML ? str : plainTextToParagraphs(str);
+}
+
+function sanitizeStyle(value) {
+  const colorOk = /^(#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}\s*(,\s*\d{1,3}\s*){2}(,\s*[\d.]+\s*)?\)|[a-z]+)$/i;
+  const sizeOk = /^(xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|\d+(\.\d+)?(px|em|rem|%))$/i;
+  const out = [];
+  String(value || "").split(";").forEach(decl => {
+    const i = decl.indexOf(":");
+    if (i < 0) return;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const val = decl.slice(i + 1).trim();
+    if ((prop === "color" || prop === "background-color") && colorOk.test(val)) out.push(prop + ":" + val);
+    else if (prop === "font-size" && sizeOk.test(val)) out.push(prop + ":" + val);
+    else if (prop === "font-weight" && /^(bold|700|600|800|normal|400)$/i.test(val)) out.push(prop + ":" + val);
+    else if (prop === "font-style" && /^(italic|normal)$/i.test(val)) out.push(prop + ":" + val);
+    else if (prop === "text-decoration" && /^(underline|none)$/i.test(val)) out.push(prop + ":" + val);
+    else if (prop === "text-align" && /^(left|center|right|justify)$/i.test(val)) out.push(prop + ":" + val);
+  });
+  return out.join(";");
+}
+
 function sanitizeArticleHTML(input) {
   const template = document.createElement("template");
-  template.innerHTML = input;
-  const allowed = new Set(["P","BR","H2","H3","STRONG","B","EM","I","U","A","UL","OL","LI","BLOCKQUOTE","IMG","HR"]);
+  template.innerHTML = normalizeContent(input);
+  const allowed = new Set(["P","DIV","SPAN","BR","H2","H3","STRONG","B","EM","I","U","A","UL","OL","LI","BLOCKQUOTE","IMG","HR"]);
   const walk = node => {
     [...node.childNodes].forEach(child => {
       if (child.nodeType === 1) {
@@ -2282,6 +2396,10 @@ function sanitizeArticleHTML(input) {
           if (child.tagName === "IMG" && name === "src" && /^https:\/\//i.test(value)) return;
           if (child.tagName === "IMG" && name === "alt") return;
           if (child.tagName === "A" && name === "target" && value === "_blank") return;
+          if (name === "style" && ["SPAN","P","DIV","H2","H3","STRONG","B","EM","I","U","LI","BLOCKQUOTE"].includes(child.tagName)) {
+            const clean = sanitizeStyle(value);
+            if (clean) { child.setAttribute("style", clean); return; }
+          }
           child.removeAttribute(attr.name);
         });
         if (child.tagName === "A") { child.setAttribute("rel","noopener noreferrer"); }
@@ -2293,6 +2411,202 @@ function sanitizeArticleHTML(input) {
   };
   walk(template.content);
   return template.innerHTML;
+}
+
+/* ================= RICH TEXT EDITOR ================= */
+const IMAGE_BUCKET = "article-images";
+let rteSavedRange = null;
+
+function rteSaveRange(editor) {
+  const sel = window.getSelection();
+  if (sel.rangeCount && editor.contains(sel.anchorNode)) rteSavedRange = sel.getRangeAt(0).cloneRange();
+}
+function rteRestoreRange(editor) {
+  editor.focus();
+  if (rteSavedRange) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(rteSavedRange);
+  }
+}
+function rteExec(editor, cmd, value, useCss) {
+  rteRestoreRange(editor);
+  document.execCommand("styleWithCSS", false, !!useCss);
+  document.execCommand(cmd, false, value ?? null);
+  rteSaveRange(editor);
+}
+
+async function resizeImage(file, maxW = 1600) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  const bmp = await createImageBitmap(file);
+  if (bmp.width <= maxW) return file;
+  const scale = maxW / bmp.width;
+  const canvas = document.createElement("canvas");
+  canvas.width = maxW; canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+  const blob = await new Promise(r => canvas.toBlob(r, type, 0.88));
+  return blob || file;
+}
+
+async function uploadImageToSupabase(file) {
+  if (!file.type.startsWith("image/")) throw new Error("File harus berupa gambar.");
+  if (file.size > 10 * 1024 * 1024) throw new Error("Ukuran gambar maksimal 10 MB.");
+  const body = await resizeImage(file);
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabaseClient.storage.from(IMAGE_BUCKET)
+    .upload(path, body, { contentType: file.type, cacheControl: "31536000", upsert: false });
+  if (error) throw new Error(error.message + " — pastikan bucket '" + IMAGE_BUCKET + "' sudah dibuat (lihat SQL di bawah).");
+  return supabaseClient.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/* Media picker modal: browse previously uploaded images or upload new ones. */
+function openMediaPicker(onPick) {
+  const modal = document.createElement("div");
+  modal.className = "media-modal";
+  modal.innerHTML = `<div class="media-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <strong style="font-size:18px">Pilih / Unggah Gambar</strong>
+      <span>
+        <label style="display:inline-block;padding:10px 14px;background:var(--green);color:#fff;border-radius:6px;cursor:pointer;font-size:14px">
+          Unggah gambar baru<input id="mediaFile" type="file" accept="image/*" multiple hidden>
+        </label>
+        <button type="button" id="mediaClose" style="padding:10px 14px">Tutup</button>
+      </span>
+    </div>
+    <p id="mediaMsg" role="status" style="color:var(--muted);font-size:13px;margin:10px 0 0"></p>
+    <div id="mediaGrid" class="media-grid"></div></div>`;
+  document.body.appendChild(modal);
+  const msg = modal.querySelector("#mediaMsg");
+  const grid = modal.querySelector("#mediaGrid");
+  const close = () => modal.remove();
+  modal.querySelector("#mediaClose").onclick = close;
+  modal.addEventListener("click", e => { if (e.target === modal) close(); });
+
+  const pick = url => { close(); onPick(url); };
+  async function loadList() {
+    msg.textContent = "Memuat gambar…";
+    const { data, error } = await supabaseClient.storage.from(IMAGE_BUCKET)
+      .list("uploads", { limit: 200, sortBy: { column: "created_at", order: "desc" } });
+    if (error) { msg.textContent = error.message; return; }
+    const files = (data || []).filter(f => f.name && !f.name.startsWith("."));
+    msg.textContent = files.length ? "Klik gambar untuk memasukkannya." : "Belum ada gambar. Unggah yang pertama.";
+    grid.innerHTML = "";
+    files.forEach(f => {
+      const url = supabaseClient.storage.from(IMAGE_BUCKET).getPublicUrl("uploads/" + f.name).data.publicUrl;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `<img src="${cmsEscape(url)}" alt="" loading="lazy">`;
+      b.onclick = () => pick(url);
+      grid.appendChild(b);
+    });
+  }
+  modal.querySelector("#mediaFile").onchange = async e => {
+    const files = [...e.target.files];
+    if (!files.length) return;
+    let last = null;
+    for (const [i, f] of files.entries()) {
+      msg.textContent = `Mengunggah ${i + 1}/${files.length}…`;
+      try { last = await uploadImageToSupabase(f); }
+      catch (err) { msg.textContent = err.message; return; }
+    }
+    if (files.length === 1 && last) { pick(last); return; }
+    loadList();
+  };
+  loadList();
+}
+
+function buildEditorToolbar(editor, toolbar) {
+  const sizes = [["", "Ukuran"], ["2", "Kecil"], ["3", "Normal"], ["4", "Sedang+"], ["5", "Besar"], ["6", "Sangat besar"], ["7", "Raksasa"]];
+  toolbar.innerHTML = `
+    <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+    <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+    <button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+    <span class="sep"></span>
+    <select id="rteSize" title="Ukuran teks">${sizes.map(s => `<option value="${s[0]}">${s[1]}</option>`).join("")}</select>
+    <select id="rteBlock" title="Gaya paragraf">
+      <option value="">Paragraf</option><option value="p">Normal</option><option value="h2">Judul besar</option><option value="h3">Judul sedang</option><option value="blockquote">Kutipan</option>
+    </select>
+    <span class="sep"></span>
+    <label title="Warna teks">A<input type="color" id="rteColor" value="#8a4fd1"></label>
+    <label title="Highlight / stabilo">🖍<input type="color" id="rteHilite" value="#fff176"></label>
+    <button type="button" id="rteNoHilite" title="Hapus highlight">⌫ HL</button>
+    <span class="sep"></span>
+    <button type="button" data-cmd="insertUnorderedList" title="Bullet list">• List</button>
+    <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+    <button type="button" id="rteLink" title="Sisipkan link">🔗</button>
+    <button type="button" id="rteImage" title="Pilih / unggah gambar">🖼 Gambar</button>
+    <span class="sep"></span>
+    <button type="button" id="rteClear" title="Hapus format">Tx</button>`;
+
+  // keep the text selection when clicking toolbar buttons
+  toolbar.addEventListener("mousedown", e => { if (e.target.closest("button")) e.preventDefault(); });
+  toolbar.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => rteExec(editor, b.dataset.cmd, null, false));
+
+  toolbar.querySelector("#rteSize").onchange = e => {
+    if (e.target.value) rteExec(editor, "fontSize", e.target.value, true);
+    e.target.value = "";
+  };
+  toolbar.querySelector("#rteBlock").onchange = e => {
+    const v = e.target.value;
+    if (v) rteExec(editor, "formatBlock", v === "blockquote" ? "blockquote" : v, false);
+    e.target.value = "";
+  };
+  toolbar.querySelector("#rteColor").addEventListener("input", e => rteExec(editor, "foreColor", e.target.value, true));
+  toolbar.querySelector("#rteHilite").addEventListener("input", e => rteExec(editor, "hiliteColor", e.target.value, true));
+  toolbar.querySelector("#rteNoHilite").onclick = () => rteExec(editor, "hiliteColor", "transparent", true);
+  toolbar.querySelector("#rteClear").onclick = () => rteExec(editor, "removeFormat", null, false);
+  toolbar.querySelector("#rteLink").onclick = () => {
+    rteSaveRange(editor);
+    const url = prompt("Alamat link (https://…):");
+    if (url && /^(https?:|mailto:)/i.test(url.trim())) rteExec(editor, "createLink", url.trim(), false);
+  };
+  toolbar.querySelector("#rteImage").onclick = () => {
+    rteSaveRange(editor);
+    openMediaPicker(url => {
+      rteExec(editor, "insertHTML", `<img src="${cmsEscape(url)}" alt=""><p><br></p>`, false);
+    });
+  };
+}
+
+function setupEditor(editor, toolbar) {
+  document.execCommand("defaultParagraphSeparator", false, "p");
+  buildEditorToolbar(editor, toolbar);
+  ["keyup", "mouseup", "focus"].forEach(ev => editor.addEventListener(ev, () => rteSaveRange(editor)));
+
+  // Paste as clean paragraphs: each line break in pasted text becomes its own paragraph.
+  editor.addEventListener("paste", e => {
+    const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
+    if (files.length) {
+      e.preventDefault();
+      uploadImageToSupabase(files[0])
+        .then(url => document.execCommand("insertHTML", false, `<img src="${cmsEscape(url)}" alt=""><p><br></p>`))
+        .catch(err => alert(err.message));
+      return;
+    }
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    const html = text.replace(/\r\n?/g, "\n").split(/\n+/).map(l => l.trim()).filter(Boolean)
+      .map(l => "<p>" + cmsEscape(l) + "</p>").join("");
+    document.execCommand("insertHTML", false, html);
+  });
+
+  // click image to select (Delete key removes it)
+  editor.addEventListener("click", e => {
+    editor.querySelectorAll("img.rte-selected").forEach(i => i.classList.remove("rte-selected"));
+    if (e.target.tagName === "IMG") e.target.classList.add("rte-selected");
+  });
+}
+
+function getEditorHTML(editor) {
+  const clone = editor.cloneNode(true);
+  clone.querySelectorAll("img.rte-selected").forEach(i => i.classList.remove("rte-selected"));
+  // Turn stray top-level text / divs into paragraphs, drop trailing empty paragraphs
+  let html = sanitizeArticleHTML(clone.innerHTML)
+    .replace(/<div(\s[^>]*)?>/gi, "<p$1>").replace(/<\/div>/gi, "</p>");
+  html = html.replace(/(<p>(\s|<br>)*<\/p>\s*)+$/i, "");
+  return html.trim();
 }
 
 function goHome() {
@@ -2372,8 +2686,15 @@ async function renderAdmin() {
       <input name="slug" placeholder="Slug URL (opsional)">
       <input name="category" placeholder="Kategori">
       <input name="excerpt" placeholder="Ringkasan artikel">
-      <input name="cover_image_url" type="url" placeholder="URL gambar sampul (opsional)">
-      <textarea name="content" rows="14" placeholder="Isi artikel (boleh menggunakan HTML sederhana: p, h2, h3, strong, em, a, ul, li)" required style="padding:12px;border:1px solid var(--line);border-radius:6px;font:15px Arial"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input name="cover_image_url" type="url" placeholder="URL gambar sampul (opsional)" style="flex:1;min-width:220px;max-width:none">
+        <button type="button" id="pickCover" style="padding:12px">Pilih / Unggah sampul</button>
+      </div>
+      <div>
+        <div id="rteToolbar" class="rte-toolbar"></div>
+        <div id="rteEditor" class="rte-editor" contenteditable="true" data-placeholder="Tulis artikel di sini…"></div>
+        <p class="rte-hint">Tekan Enter sekali = paragraf baru. Blok teks → pakai tombol warna, highlight, ukuran, bold. Gambar bisa juga di-paste langsung.</p>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="button" id="saveDraft" style="padding:12px">Simpan Draft</button>
         <button type="button" id="publishArticle" style="padding:12px;background:var(--green);color:white;border:0;border-radius:6px">Publish</button>
@@ -2383,12 +2704,15 @@ async function renderAdmin() {
     <div id="adminArticleList">${(articles||[]).map(a=>`<div style="padding:12px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><strong>${cmsEscape(a.title)}</strong> · ${cmsEscape(a.status)}</span><span><button data-edit="${a.id}">Edit</button> <button data-delete="${a.id}">Hapus</button></span></div>`).join("")}</div>`;
   document.getElementById("logoutBtn").onclick = async () => { await supabaseClient.auth.signOut(); renderAdmin(); };
   const form = document.getElementById("articleForm");
-  document.getElementById("resetArticle").onclick = () => form.reset();
+  const editor = document.getElementById("rteEditor");
+  setupEditor(editor, document.getElementById("rteToolbar"));
+  document.getElementById("pickCover").onclick = () => openMediaPicker(url => { form.elements.cover_image_url.value = url; });
+  document.getElementById("resetArticle").onclick = () => { form.reset(); editor.innerHTML = ""; };
   async function saveArticle(status) {
     const fd = new FormData(form);
     const title = String(fd.get("title")||"").trim();
-    const content = String(fd.get("content")||"").trim();
-    if (!title || !content) { document.getElementById("editorMessage").textContent = "Judul dan isi artikel wajib diisi."; return; }
+    const content = getEditorHTML(editor);
+    if (!title || !editor.textContent.trim() && !editor.querySelector("img")) { document.getElementById("editorMessage").textContent = "Judul dan isi artikel wajib diisi."; return; }
     const now = new Date().toISOString();
     const row = {
       title, slug: String(fd.get("slug")||"").trim() || slugify(title),
@@ -2411,7 +2735,8 @@ async function renderAdmin() {
   panel.querySelectorAll("[data-edit]").forEach(btn => btn.onclick = async () => {
     const {data, error} = await supabaseClient.from("articles").select("*").eq("id",btn.dataset.edit).single();
     if (error) return alert(error.message);
-    Object.entries(data).forEach(([key,value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
+    Object.entries(data).forEach(([key,value]) => { if (key !== "content" && form.elements[key]) form.elements[key].value = value ?? ""; });
+    editor.innerHTML = sanitizeArticleHTML(data.content || "");
     window.scrollTo({top:0,behavior:"smooth"});
   });
   panel.querySelectorAll("[data-delete]").forEach(btn => btn.onclick = async () => {
